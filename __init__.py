@@ -84,12 +84,13 @@ def _wave_data(morse_token, bit_rate=16000, freq=1674.62, duration_unit=.06):
     letter_gap = duration_unit * 3
     word_gap = duration_unit * 7
 
-    unit_dict = {
+    _unit_dict = {
         '.': dit,
         '-': dah,
         ' ': letter_gap,
         '  ': word_gap
     }
+    unit_dict = defaultdict(lambda: dit, _unit_dict)
 
     morse_token_duration = unit_dict[morse_token]
     tone_tokens = ['.', '-']
