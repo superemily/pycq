@@ -1,6 +1,7 @@
 from collections import defaultdict
 import math
 from pyaudio import PyAudio
+import wave
 
 class keydefaultdict(defaultdict):
     """
@@ -38,14 +39,7 @@ def from_morse(morse_string):
 
 def play_morse(morse_string):
     bit_rate = 16000
-    morse = _morse_list(morse_string)
-    wave_data = ''
-    end_of_letter_token = ' '
-    for morse_letter in morse:
-        for morse_token in morse_letter:
-            wave_data += _wave_data(morse_token, bit_rate=bit_rate)
-        wave_data += _wave_data(end_of_letter_token, bit_rate=bit_rate)
-
+    wave_data = _record_wave_data(morse_string, bit_rate)
     print(morse_string)
     _play(wave_data, bit_rate)
 
@@ -54,27 +48,30 @@ def play_string_as_morse(string):
     morse = to_morse(string)
     play_morse(morse)
 
+def save_morse_file(morse_string, filename='morse.wav', channels=1, sample_width=2, bit_rate=16000):
+    wave_data = _record_wave_data(morse_string, bit_rate)
+    wave_file = wave.open(filename, 'wb')
+    wave_file.setnchannels(channels)
+    wave_file.setsampwidth(sample_width)
+    wave_file.setframerate(bit_rate)
+    wave_file.writeframes(wave_data.encode())
+    wave_file.close()
+    return filename
+
 def _morse_list(morse_string):
     morse_string = morse_string.replace('  ', ' |')
     morse = morse_string.split(' ')
     morse = [' ' if m == '|' else m for m in morse]
     return morse
 
-def _wave_tone_data(duration, bit_rate, freq):
-    num_frames = int(duration * bit_rate)
+def _record_wave_data(morse_string, bit_rate):
+    morse = _morse_list(morse_string)
     wave_data = ''
-    for x in range(num_frames):
-        wave_data +=  chr(
-            int(math.sin(x / ((bit_rate / freq) / math.pi)) * 127 + 128)
-        )
-    return wave_data
-
-def _wave_rest_data(duration, bit_rate):
-    num_frames = int(duration * bit_rate)
-    wave_data = ''
-
-    for x in range(num_frames):
-        wave_data += chr(128)
+    end_of_letter_token = ' '
+    for morse_letter in morse:
+        for morse_token in morse_letter:
+            wave_data += _wave_data(morse_token, bit_rate=bit_rate)
+        wave_data += _wave_data(end_of_letter_token, bit_rate=bit_rate)
     return wave_data
 
 def _wave_data(morse_token, bit_rate=16000, freq=1674.62, duration_unit=.06):
@@ -103,6 +100,24 @@ def _wave_data(morse_token, bit_rate=16000, freq=1674.62, duration_unit=.06):
         wave_data += _wave_rest_data(morse_token_duration, bit_rate)
 
     return wave_data
+
+def _wave_tone_data(duration, bit_rate, freq):
+    num_frames = int(duration * bit_rate)
+    wave_data = ''
+    for x in range(num_frames):
+        wave_data +=  chr(
+            int(math.sin(x / ((bit_rate / freq) / math.pi)) * 127 + 128)
+        )
+    return wave_data
+
+def _wave_rest_data(duration, bit_rate):
+    num_frames = int(duration * bit_rate)
+    wave_data = ''
+
+    for x in range(num_frames):
+        wave_data += chr(128)
+    return wave_data
+
 
 def _play(wave_data, bit_rate):
     p = PyAudio()
