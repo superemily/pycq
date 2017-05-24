@@ -1,5 +1,6 @@
 from collections import defaultdict
 import math
+import operator
 from pyaudio import PyAudio
 import wave
 
@@ -57,6 +58,131 @@ def save_morse_file(morse_string, filename='morse.wav', channels=1, sample_width
     wave_file.writeframes(wave_data.encode())
     wave_file.close()
     return filename
+
+def read_morse_file(filename):
+    try:
+        import librosa
+        import numpy as np
+    except ModuleNotFoundError:
+        print('You need to have numpy and librosa installed to use read_morse_file')
+
+    threshold = -8
+    tone = 0
+    silence = 1
+    y, sr = librosa.load(filename)
+    S = librosa.feature.melspectrogram(y, sr=sr, n_mels=2)
+    log_S = librosa.logamplitude(S, ref_power=np.max)[:1][0]
+
+    for i, x in enumerate(log_S):
+        if x > threshold:
+            log_S[i] = 0
+        else:
+            log_S[i] = 1
+    tone_flag = False
+    tone_count = 0
+    silence_flag = False
+    silence_count = 0
+    output = ''
+    counts = []
+    tone_dict = defaultdict(lambda: 0)
+    silence_dict = defaultdict(lambda: 0)
+    for tick in log_S:
+        if tick == silence:
+            if not silence_flag:
+                silence_flag = True
+                tone_flag = False
+                if tone_count:
+                    counts.append('t%s' % tone_count)
+                    tone_dict[tone_count] += 1
+                    tone_count = 0
+            silence_count += 1
+            output += ' '
+        elif tick == tone:
+            if not tone_flag:
+                tone_flag = True
+                silence_flag = False
+                if silence_count:
+                    counts.append('s%s' % silence_count)
+                    silence_dict[silence_count] += 1
+                    silence_count = 0
+            tone_count += 1
+            output += '*'
+    output
+    dit_range, dah_range = _tone_ranges(tone_dict)
+    token_range, letter_range, word_range = _silence_ranges(silence_dict)
+
+    morse = ''
+    for item in counts:
+        value = int(item[1:])
+        if item.startswith('t'):
+            if value in dit_range:
+                morse += '.'
+            elif value in dah_range:
+                morse += '-'
+        elif item.startswith('s'):
+            if value in letter_range:
+                morse += ' '
+            elif value in word_range:
+                morse += '   '
+    print(morse)
+    print(from_morse(morse))
+
+def _tone_ranges(tone_dict):
+    sorted_by_freq = sorted(
+        tone_dict.items(),
+        key=operator.itemgetter(1),
+        reverse=True
+    )
+    top_two_lengths = [x[0] for x in sorted_by_freq[:2]]
+    dit_length = min(top_two_lengths)
+
+    dit_range = list(range(max(1, dit_length-1), dit_length + 2))
+    dah_range = list(range(dit_length * 2, dit_length * 3 + 1))
+
+    unused_keys = tone_dict.keys() - set(dit_range) - set(dah_range)
+
+    for key in unused_keys:
+        dit_distance = [abs(key - dit_range[0]), abs(key - dit_range[-1])]
+        dah_distance = [abs(key - dah_range[0]), abs(key - dah_range[-1])]
+        if min(dit_distance) <= min(dah_distance):
+            dit_range.append(key)
+        else:
+            dah_range.append(key)
+
+    return dit_range, dah_range
+
+def _silence_ranges(silence_dict):
+    sorted_by_freq = sorted(
+        silence_dict.items(),
+        key=operator.itemgetter(1),
+        reverse=True
+    )
+    inter_token_length = min([x[0] for x in sorted_by_freq[:3]])
+
+    inter_token_range = list(range(max(1, inter_token_length - 1), inter_token_length + 2))
+    inter_letter_range = list(range(max(1, inter_token_length * 3), inter_token_length * 8 + 2))
+    inter_word_range = list(range(max(1, inter_token_length * 9 - 1), inter_token_length * 24 + 2))
+
+
+    unused_keys = silence_dict.keys() - set(inter_token_range) - set(inter_letter_range) - set(inter_word_range)
+
+    for key in unused_keys:
+        inter_token_distance = [abs(key - inter_token_range[0]),
+                                abs(key - inter_token_range[-1])]
+        inter_letter_distance = [abs(key - inter_letter_range[0]),
+                                 abs(key - inter_letter_range[-1])]
+        inter_word_distance = [abs(key - inter_word_range[0]),
+                               abs(key - inter_word_range[-1])]
+
+        sorted_by_min_distance = sorted(
+            [(inter_token_range, min(inter_token_distance)),
+             (inter_letter_range, min(inter_letter_distance)),
+             (inter_word_range, min(inter_word_distance))],
+            key=operator.itemgetter(1)
+        )
+        sorted_by_min_distance[0][0].append(key)
+
+    return inter_token_range, inter_letter_range, inter_word_range
 
 def _morse_list(morse_string):
     morse_string = morse_string.replace('  ', ' |')
@@ -117,7 +243,6 @@ def _wave_rest_data(duration, bit_rate):
     for x in range(num_frames):
         wave_data += chr(128)
     return wave_data
-
 
 def _play(wave_data, bit_rate):
     p = PyAudio()
