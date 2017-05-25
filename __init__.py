@@ -39,10 +39,9 @@ def from_morse(morse_string):
     return ''.join(map(lambda x: FROM_MORSE[x], morse)).upper()
 
 def play_morse(morse_string):
-    bit_rate = 16000
-    wave_data = _record_wave_data(morse_string, bit_rate)
+    wave_data = _record_wave_data(morse_string)
     print(morse_string)
-    _play(wave_data, bit_rate)
+    _play(wave_data)
 
 def play_string_as_morse(string):
     print(string)
@@ -59,14 +58,17 @@ def save_morse_file(morse_string, filename='morse.wav', channels=1, sample_width
     wave_file.close()
     return filename
 
-def read_morse_file(filename):
+def save_string_as_morse_file(string, filename='morse.wav', channels=1, sample_width=2, bit_rate=16000):
+    morse = to_morse(string)
+    return save_morse_file(morse, filename=filename, channels=channels, sample_width=2, bit_rate=16000)
+
+def read_morse_file(filename, threshold=-8):
     try:
         import librosa
         import numpy as np
     except ModuleNotFoundError:
         print('You need to have numpy and librosa installed to use read_morse_file')
 
-    threshold = -8
     tone = 0
     silence = 1
     y, sr = librosa.load(filename)
@@ -107,7 +109,6 @@ def read_morse_file(filename):
                     silence_count = 0
             tone_count += 1
             output += '*'
-    output
     dit_range, dah_range = _tone_ranges(tone_dict)
     token_range, letter_range, word_range = _silence_ranges(silence_dict)
 
@@ -190,7 +191,7 @@ def _morse_list(morse_string):
     morse = [' ' if m == '|' else m for m in morse]
     return morse
 
-def _record_wave_data(morse_string, bit_rate):
+def _record_wave_data(morse_string, bit_rate=16000):
     morse = _morse_list(morse_string)
     wave_data = ''
     end_of_letter_token = ' '
@@ -244,7 +245,7 @@ def _wave_rest_data(duration, bit_rate):
         wave_data += chr(128)
     return wave_data
 
-def _play(wave_data, bit_rate):
+def _play(wave_data, bit_rate=16000):
     p = PyAudio()
     stream = p.open(
         format=p.get_format_from_width(1),
